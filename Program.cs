@@ -23,6 +23,8 @@ namespace RSDZ1
     {
         public string Id;
         public double AverageScore;
+        public int Netvotes;
+        public double Positive;
 
         public Film( string id)
         {
@@ -81,6 +83,8 @@ namespace RSDZ1
             #endregion
 
             FindAverageScore(films, ratings);
+            FindNetvotes(films, ratings);
+            FindPositive(films, ratings);
             Console.ReadLine();
 
         }
@@ -111,5 +115,60 @@ namespace RSDZ1
                 Console.WriteLine( "filmId: "  + list[i].Id +  " score "  + Math.Round( list[i].AverageScore, 2) );
             }
         }
+
+        public static void FindNetvotes(List<Film> allFilms, Dictionary<string, List<int>> ratings)
+        {
+            foreach (Film film in allFilms)
+            {
+                List<int> filmRatings = ratings[film.Id];
+
+                int upVotes = 0;
+                int downVotes = 0;
+
+                foreach (int oneRating in filmRatings)
+                {
+                    if (oneRating > 5)
+                        upVotes++;
+                    else
+                        downVotes++;
+                }
+
+                film.Netvotes = upVotes - downVotes;
+            }//foreach
+
+
+            List<Film> list = allFilms.OrderByDescending(film => film.Netvotes).ToList<Film>();
+            for (int i = 0; i <= 9; i++)
+            {
+                Console.WriteLine("filmId: " + list[i].Id + " score " +list[i].Netvotes.ToString() );
+            }
+        }
+
+        public static void FindPositive(List<Film> allFilms, Dictionary<string, List<int>> ratings)
+        {
+            foreach (Film film in allFilms)
+            {
+                List<int> filmRatings = ratings[film.Id];
+
+                int positiveN = 0;
+                foreach (int oneRating in filmRatings)
+                {
+                    if (oneRating > 7)
+                    {
+                        positiveN++;
+                    }
+                }
+
+                film.Positive = (Convert.ToDouble( positiveN ) / filmRatings.Count) * 100;
+            }
+
+            List<Film> list = allFilms.OrderByDescending(film => film.Positive).ToList<Film>();
+            for (int i = 0; i <= 9; i++)
+            {
+                Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Positive, 2).ToString());
+            }
+        }
+
+         
     }
 }
