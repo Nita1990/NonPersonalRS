@@ -22,9 +22,8 @@ namespace RSDZ1
     class Film
     {
         public string Id;
-        public double AverageScore;
-        public int Netvotes;
-        public double Positive;
+        public double Score;
+        public List<int> Ratings = new List<int>();
 
         public Film( string id)
         {
@@ -37,14 +36,39 @@ namespace RSDZ1
        
         static void Main(string[] args)
         {
-            Dictionary<string, List<int>> ratings = new Dictionary<string, List<int>>();
-            List<Film> films = new List<Film>();
+            #region Получение параметров из командной строки
+            string ratingsFilename = GetParamFromArgs("-r", args);
+            if (ratingsFilename == null)
+                return;
 
+            string titlesFilename = GetParamFromArgs("-n", args);
+            if (titlesFilename == null)
+                return;
+
+            string methodName = GetParamFromArgs("-m", args);
+            if (methodName == null)
+                return;
+
+            string filmIdForAssociation;
+            if (methodName == "association")
+            {
+                filmIdForAssociation = GetParamFromArgs("-x", args);
+                if( filmIdForAssociation == null )
+                    return;
+            }
+
+            string outputFilename = GetParamFromArgs("-o", args);
+            if( outputFilename == null )
+                return;
+            #endregion
+
+            Dictionary<string, Film> filmsDic = new Dictionary<string,Film>();
+            
             #region считывание данных из файла
-            string raitingsFilename = "ratings.csv";
             int i = 0;
 
-            using (StreamReader stream = new StreamReader(raitingsFilename))
+            int strange = 0;
+            using (StreamReader stream = new StreamReader(ratingsFilename))
             {
                 bool first = true;
                 while (!stream.EndOfStream)
@@ -57,19 +81,21 @@ namespace RSDZ1
                         string filmId = curRow[1];
 
                         if (curRow[2] == "" )
+                        {
+                            strange++;
                             continue;
+                        }
 
                         int rating = Convert.ToInt32(curRow[2]);
 
-                        if (!ratings.ContainsKey(filmId))
+                        if (!filmsDic.ContainsKey(filmId))
                         {
 
-                            List<int> filmRatings = new List<int>();
-                            ratings.Add(filmId, filmRatings);
-                            films.Add( new Film( filmId ));
+                            Film film = new Film( filmId );
+                            filmsDic.Add(filmId, film);
                         }
 
-                        List<int> curFilmRatings = ratings[filmId];
+                        List<int> curFilmRatings = filmsDic[filmId].Ratings;
                         curFilmRatings.Add(rating);
                            
                         i++;
@@ -82,11 +108,36 @@ namespace RSDZ1
 
             #endregion
 
-            FindAverageScore(films, ratings);
-            FindNetvotes(films, ratings);
-            FindPositive(films, ratings);
+            Console.WriteLine( "str " + strange.ToString());
+            switch( methodName )
+            {
+                case "average":
+                    FindAgregatedOpinion(filmsDic, outputFilename, "average");
+                    break;
+                case "netvotes":
+                    FindAgregatedOpinion(filmsDic, outputFilename, "netvotes");
+                    break;
+                case "positive":
+                    FindAgregatedOpinion(filmsDic, outputFilename, "positive");
+                    break;
+                default:
+                    Console.WriteLine("Задан неверный тип метода");
+                    break;
+            }
             Console.ReadLine();
 
+        }
+
+        private static string GetParamFromArgs(string paramName, string[] args)
+        {
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == paramName)
+                    return args[i + 1];
+            }
+
+            Console.WriteLine("Не задан параметр " + paramName);
+            return null;
         }
 
         /// <summary>
@@ -95,80 +146,66 @@ namespace RSDZ1
         /// <param name="allFilms"></param>
         /// <param name="?"></param>
         /// <param name="ratings"></param>
-        public static void FindAverageScore( List<Film> allFilms,  Dictionary<string, List<int>> ratings )
+        public static void FindAgregatedOpinion(Dictionary<string, Film> filmsDic, string outputFilename, string method)
         {
            /* для каждого фильма находим среднее значение*/
-            foreach (Film film in allFilms)
+            foreach (Film film in filmsDic.Values)
             {
-                List<int> filmRatings = ratings[film.Id];
+                List<int> filmRatings = filmsDic[film.Id].Ratings;
 
                 int totalScore = 0;
                 foreach (int oneRating in filmRatings)
-                    totalScore += oneRating;
-
-                film.AverageScore = Convert.ToDouble(totalScore) / filmRatings.Count;
-            }
-
-            List<Film>list = allFilms.OrderByDescending(film => film.AverageScore).ToList<Film>();
-            for (int i = 0; i <= 9; i++)
-            { 
-                Console.WriteLine( "filmId: "  + list[i].Id +  " score "  + Math.Round( list[i].AverageScore, 2) );
-            }
-        }
-
-        public static void FindNetvotes(List<Film> allFilms, Dictionary<string, List<int>> ratings)
-        {
-            foreach (Film film in allFilms)
-            {
-                List<int> filmRatings = ratings[film.Id];
-
-                int upVotes = 0;
-                int downVotes = 0;
-
-                foreach (int oneRating in filmRatings)
                 {
-                    if (oneRating > 5)
-                        upVotes++;
-                    else
-                        downVotes++;
-                }
-
-                film.Netvotes = upVotes - downVotes;
-            }//foreach
-
-
-            List<Film> list = allFilms.OrderByDescending(film => film.Netvotes).ToList<Film>();
-            for (int i = 0; i <= 9; i++)
-            {
-                Console.WriteLine("filmId: " + list[i].Id + " score " +list[i].Netvotes.ToString() );
-            }
-        }
-
-        public static void FindPositive(List<Film> allFilms, Dictionary<string, List<int>> ratings)
-        {
-            foreach (Film film in allFilms)
-            {
-                List<int> filmRatings = ratings[film.Id];
-
-                int positiveN = 0;
-                foreach (int oneRating in filmRatings)
-                {
-                    if (oneRating > 7)
+                    switch( method )
                     {
-                        positiveN++;
+                        case "average":
+                            totalScore += oneRating;
+                            break;
+
+                        case "netvotes":
+                            if (oneRating > 5)
+                                totalScore++;
+                            else
+                                totalScore--;
+                            break;
+                        case "positive":
+                             if (oneRating > 7)
+                                totalScore++;
+                            break;
+                        default:
+                            break;
+
                     }
+
                 }
 
-                film.Positive = (Convert.ToDouble( positiveN ) / filmRatings.Count) * 100;
+                switch( method )
+                {
+                    case "average":
+                        film.Score = Convert.ToDouble(totalScore) / filmRatings.Count;
+                        break;
+                    case "netvotes":
+                        film.Score = totalScore;
+                        break;
+                    case "positive":
+                        film.Score = (Convert.ToDouble( totalScore ) / filmRatings.Count) * 100;
+                        break;
+                    default:
+                        break;
+
+                }
             }
 
-            List<Film> list = allFilms.OrderByDescending(film => film.Positive).ToList<Film>();
-            for (int i = 0; i <= 9; i++)
+            List<Film>list = filmsDic.Values.OrderByDescending(film => film.Score).ToList<Film>();
+            using (StreamWriter writer = new StreamWriter(outputFilename))
             {
-                Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Positive, 2).ToString());
+                writer.WriteLine("film_id|score");
+                for (int i = 0; i <= 9; i++)
+                {
+                    Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Score, 2));
+                    writer.WriteLine(list[i].Id + "|" + Math.Round(list[i].Score, 2).ToString());
+                }
             }
-        }
-
-         
+        }    
     }
 }
