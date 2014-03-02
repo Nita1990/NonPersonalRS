@@ -7,23 +7,13 @@ using System.Collections;
 
 namespace RSDZ1
 {
-    class UserRating
-    {
-        public int User;
-        public int Rating;
-
-        public UserRating( int user, int rating)
-        {
-            User = user;
-            Rating = rating;
-        }
-    }
-
     class Film
     {
         public string Id;
         public double Score;
         public List<int> Ratings = new List<int>();
+        public Dictionary<string, string> Users = new Dictionary<string, string>();
+        public string Name;
 
         public Film( string id)
         {
@@ -49,7 +39,7 @@ namespace RSDZ1
             if (methodName == null)
                 return;
 
-            string filmIdForAssociation;
+            string filmIdForAssociation="";
             if (methodName == "association")
             {
                 filmIdForAssociation = GetParamFromArgs("-x", args);
@@ -63,11 +53,16 @@ namespace RSDZ1
             #endregion
 
             Dictionary<string, Film> filmsDic = new Dictionary<string,Film>();
-            
+          
+            Dictionary<string, string> allUsers = new Dictionary<string, string>();
+
+            //словарь фильм - список юзеров. Нужен только для проверки дубликатов 
+            Dictionary<string, Dictionary<string, string>> userRatedFilms = new Dictionary<string, Dictionary<string, string>>();
+
             #region считывание данных из файла
             int i = 0;
 
-            int strange = 0;
+            Console.WriteLine(DateTime.Now.ToString());
             using (StreamReader stream = new StreamReader(ratingsFilename))
             {
                 bool first = true;
@@ -82,7 +77,6 @@ namespace RSDZ1
 
                         if (curRow[2] == "" )
                         {
-                            strange++;
                             continue;
                         }
 
@@ -94,10 +88,18 @@ namespace RSDZ1
                             Film film = new Film( filmId );
                             filmsDic.Add(filmId, film);
                         }
+ 
+                        if (!filmsDic[filmId].Users.ContainsKey(userId))
+                        {
+                            filmsDic[filmId].Users.Add(userId, userId);
 
-                        List<int> curFilmRatings = filmsDic[filmId].Ratings;
-                        curFilmRatings.Add(rating);
-                           
+                           filmsDic[filmId].Ratings.Add(rating);
+                        }
+
+                       
+
+                        if (!allUsers.ContainsKey(userId))
+                            allUsers.Add(userId, userId);
                         i++;
                     }
                     else
@@ -106,9 +108,28 @@ namespace RSDZ1
                 }
             }
 
+            /*считывание названий фильмов*/
+            using (StreamReader stream = new StreamReader(titlesFilename))
+            { 
+                 bool first = true;
+                 while (!stream.EndOfStream)
+                 {
+                     string[] curRow = stream.ReadLine().Split('|');
+                     if (!first) /*строка заголовка не интересует*/
+                     {
+                         string filmId = curRow[0];
+                         string filmName = curRow[1];
+                         filmsDic[filmId].Name = filmName;
+                     }
+                     else
+                         first = false;
+                 }
+            }
+
+            Console.WriteLine( DateTime.Now.ToString() + " Данные считаны");
             #endregion
 
-            Console.WriteLine( "str " + strange.ToString());
+            Console.WriteLine( "nUsers " + allUsers.Count.ToString());
             switch( methodName )
             {
                 case "average":
@@ -119,6 +140,9 @@ namespace RSDZ1
                     break;
                 case "positive":
                     FindAgregatedOpinion(filmsDic, outputFilename, "positive");
+                    break;
+                case "association":
+                    FindAssociation(filmsDic, outputFilename, filmIdForAssociation, allUsers);
                     break;
                 default:
                     Console.WriteLine("Задан неверный тип метода");
@@ -154,6 +178,7 @@ namespace RSDZ1
                 List<int> filmRatings = filmsDic[film.Id].Ratings;
 
                 int totalScore = 0;
+
                 foreach (int oneRating in filmRatings)
                 {
                     switch( method )
@@ -167,16 +192,15 @@ namespace RSDZ1
                                 totalScore++;
                             else
                                 totalScore--;
-                            break;
+                                break;
                         case "positive":
                              if (oneRating > 7)
                                 totalScore++;
                             break;
                         default:
                             break;
-
+                             
                     }
-
                 }
 
                 switch( method )
@@ -202,10 +226,42 @@ namespace RSDZ1
                 writer.WriteLine("film_id|score");
                 for (int i = 0; i <= 9; i++)
                 {
-                    Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Score, 2));
+                    Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Score, 2) + " filmName " + list[i].Name);
+                    writer.WriteLine(list[i].Id + "|" + Math.Round(list[i].Score, 2).ToString() );
+                }
+            }
+        }
+
+        public static void FindAssociation(Dictionary<string, Film> filmsDic, string outputFilename, string filmId, Dictionary<string, string> allUsers)
+        {  
+            Console.WriteLine( "смотрели X " +  filmsDic[filmId].Users.Count.ToString() );
+            List<string> notX = allUsers.Keys.Except<string>(filmsDic[filmId].Users.Keys).ToList<string>();
+            Console.WriteLine( "не смотрели X:" + notX.Count.ToString());
+             /* для каждого фильма находим значение ассоциации с заданным фильмом*/
+            foreach (Film film in filmsDic.Values)
+            {
+                if (film.Id != filmId)
+                {
+                    List<string> XYIntersection = film.Users.Keys.Intersect<string>(filmsDic[filmId].Users.Keys).ToList<string>();
+
+                    List<string> notXYIntersection = film.Users.Keys.Intersect<string>(notX).ToList<string>();
+
+                    film.Score = (Convert.ToDouble(XYIntersection.Count) / filmsDic[filmId].Users.Count) / ( Convert.ToDouble( notXYIntersection.Count ) / notX.Count);
+                
+                }
+            }
+
+            List<Film> list = filmsDic.Values.OrderByDescending(film => film.Score).ToList<Film>();
+            using (StreamWriter writer = new StreamWriter(outputFilename))
+            {
+                writer.WriteLine("film_id|score");
+                for (int i = 0; i <= 9; i++)
+                {
+                    Console.WriteLine("filmId: " + list[i].Id + " score " + Math.Round(list[i].Score, 2) + " filmName " + list[i].Name );
                     writer.WriteLine(list[i].Id + "|" + Math.Round(list[i].Score, 2).ToString());
                 }
             }
-        }    
+        
+        }
     }
 }
