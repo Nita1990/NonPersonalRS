@@ -56,9 +56,6 @@ namespace RSDZ1
           
             Dictionary<string, string> allUsers = new Dictionary<string, string>();
 
-            //словарь фильм - список юзеров. Нужен только для проверки дубликатов 
-            Dictionary<string, Dictionary<string, string>> userRatedFilms = new Dictionary<string, Dictionary<string, string>>();
-
             #region считывание данных из файла
             int i = 0;
 
